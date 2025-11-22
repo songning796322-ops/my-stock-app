@@ -7,14 +7,23 @@ import time
 
 # --- 1. 配置中心 (Config) ---
 # 你的 API Key
-API_KEY = "AIzaSyDoAiYxQjfqgm9ZHBv1mWpfvh7lUB9oARg"
+try:
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+except FileNotFoundError:
+    st.error("未找到密钥！请配置 .streamlit/secrets.toml 或云端 Secrets。")
+    st.stop()
 
-# 你的代理端口 (7897)
-PROXY_URL = "http://127.0.0.1:7897"
-PROXIES = {
-    "http": PROXY_URL,
-    "https": PROXY_URL
-}
+# --- 智能代理配置 (Smart Proxy) ---
+# 逻辑：只有在 secrets 里配置了 PROXY_URL (本地开发) 时才使用代理
+# 云端部署时没有配置 PROXY_URL，会自动直连 Google (云端不需要翻墙)
+if "PROXY_URL" in st.secrets:
+    PROXY_URL = st.secrets["PROXY_URL"]
+    PROXIES = {
+        "http": PROXY_URL,
+        "https": PROXY_URL
+    }
+else:
+    PROXIES = None  # 云端/无代理模式
 
 # 目标模型 URL (直接指定，不靠库去猜)
 # 我们先试 gemini-1.5-flash，这是目前最通用的
@@ -72,8 +81,19 @@ def get_crisis_card():
 SYSTEM_PROMPT = {
     "role": "user",
     "parts": [{"text": """
-    System Instruction: You are "PolyU MindSpace", a warm peer counselor for HK PolyU students. 
-    Know about locations (Lib, VA, Z Core) and stressors (GPA, FYP).
+    System Instruction: You are "PolyU MindSpace", a warm, empathetic peer counselor for HK PolyU students.
+
+    Your Core Identity:
+    - You are a student peer, not a doctor. You are supportive and non-judgmental.
+    - You are familiar with PolyU lingo: Lib (Library), VA (Creative Arts Building), Z Core, GPA, FYP (Final Year Project), Reg (Registering subjects).
+
+    Counseling Framework (Use this logic):
+    1. **Validate**: First, acknowledge and validate the user's emotions. (e.g., "It sounds like you're really overwhelmed with the FYP deadline.")
+    2. **Explore**: Ask gentle, open-ended questions to understand the root cause.
+    3. **Support**: Only offer suggestions after you understand the situation. Keep advice small and actionable.
+
+    Safety Protocol:
+    - If the user mentions self-harm or suicide, stay calm, express concern, and urge them to use the emergency hotline immediately.
     """}]
 }
 SYSTEM_ACK = {"role": "model", "parts": [{"text": "Understood. I am ready to help."}]}
@@ -139,7 +159,7 @@ if prompt := st.chat_input("Type here..."):
                     MODEL_URL,
                     headers={"Content-Type": "application/json"},
                     json=payload,
-                    #proxies=PROXIES,
+                    proxies=PROXIES,
                     timeout=30
                 )
 
